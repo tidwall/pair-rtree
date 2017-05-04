@@ -92,9 +92,8 @@ func New(opts *Options) *RTree {
 	if opts == nil {
 		opts = DefaultOptions
 	}
-	var maxEntries = DefaultOptions.MaxEntries
-	tr.t = DefaultOptions.Transformer
-	tr.maxEntries = int(mathMax(4, float64(maxEntries)))
+	tr.t = opts.Transformer
+	tr.maxEntries = int(mathMax(4, float64(opts.MaxEntries)))
 	tr.minEntries = int(mathMax(2, math.Ceil(float64(tr.maxEntries)*0.4)))
 	tr.data = createNode(nil)
 	return tr
