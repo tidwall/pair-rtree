@@ -154,6 +154,14 @@ func testRandom(t *testing.T, which string, n int) {
 	assert.Equal(t, min, minb)
 	assert.Equal(t, max, maxb)
 
+	// scan
+	var arr []pair.Pair
+	tr.Scan(func(item pair.Pair) bool {
+		arr = append(arr, item)
+		return true
+	})
+	assert.True(t, testHasSameItems(objs, arr))
+
 	// search
 	testSearch(t, tr, objs, 0.10, true)
 	testSearch(t, tr, objs, 0.50, true)
@@ -287,6 +295,24 @@ func testIntersects(obj, box pair.Pair) bool {
 	bmin, bmax := geobin.WrapBinary(box.Value()).Rect()
 	return bmin[0] <= amax[0] && bmin[1] <= amax[1] && bmin[2] <= amax[2] &&
 		bmax[0] >= amin[0] && bmax[1] >= amin[1] && bmax[2] >= amin[2]
+}
+func testHasSameItems(a1, a2 []pair.Pair) bool {
+	if len(a1) != len(a2) {
+		return false
+	}
+	for _, p1 := range a1 {
+		var found bool
+		for _, p2 := range a2 {
+			if p1 == p2 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 func TestOutput3DPNG(t *testing.T) {

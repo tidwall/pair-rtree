@@ -547,6 +547,27 @@ func traverse(node *treeNode, iter func(min, max [2]float64, level int, item pai
 	return true
 }
 
+func (tr *RTree) Scan(iter func(item pair.Pair) bool) bool {
+	return scan(tr.data, iter)
+}
+
+func scan(node *treeNode, iter func(item pair.Pair) bool) bool {
+	if node.leaf {
+		for _, ptr := range node.children {
+			if !iter(pair.FromPointer(ptr)) {
+				return false
+			}
+		}
+	} else {
+		for _, ptr := range node.children {
+			if !scan((*treeNode)(ptr), iter) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func (tr *RTree) Bounds() (min, max [2]float64) {
 	if len(tr.data.children) == 0 {
 		return [2]float64{0, 0}, [2]float64{0, 0}

@@ -151,6 +151,14 @@ func testRandom(t *testing.T, which string, n int) {
 	assert.Equal(t, min, minb)
 	assert.Equal(t, max, maxb)
 
+	// scan
+	var arr []pair.Pair
+	tr.Scan(func(item pair.Pair) bool {
+		arr = append(arr, item)
+		return true
+	})
+	assert.True(t, testHasSameItems(objs, arr))
+
 	// search
 	testSearch(t, tr, objs, 0.10, true)
 	testSearch(t, tr, objs, 0.50, true)
@@ -283,6 +291,24 @@ func testIntersects(obj, box pair.Pair) bool {
 		bmax[0] >= amin[0] && bmax[1] >= amin[1]
 }
 
+func testHasSameItems(a1, a2 []pair.Pair) bool {
+	if len(a1) != len(a2) {
+		return false
+	}
+	for _, p1 := range a1 {
+		var found bool
+		for _, p2 := range a2 {
+			if p1 == p2 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
 func TestOutput2DPNG(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
 	tr := New()
