@@ -82,10 +82,18 @@ func testRandom(t *testing.T, n, lb, ub int) {
 	assert.Equal(t, min, minb)
 	assert.Equal(t, max, maxb)
 
+	// scan
+	var arr []pair.Pair
+	tr.Scan(func(item pair.Pair) bool {
+		arr = append(arr, item)
+		return true
+	})
+	assert.True(t, testHasSameItems(objs, arr))
+
 	// search
 	testSearch(t, tr, objs, 0.20, true)
-	//testSearch(t, tr, objs, 0.50, true)
-	//testSearch(t, tr, objs, 1.00, true)
+	testSearch(t, tr, objs, 0.50, true)
+	testSearch(t, tr, objs, 1.00, true)
 
 	//// knn
 	testKNN(t, tr, objs, int(float64(n)*0.001), true)
@@ -354,4 +362,22 @@ func testIntersects2(amin, amax, bmin, bmax [3]float64) bool {
 func testIntersects3(amin, amax, bmin, bmax [3]float64) bool {
 	return bmin[0] <= amax[0] && bmin[1] <= amax[1] && bmin[2] <= amax[2] &&
 		bmax[0] >= amin[0] && bmax[1] >= amin[1] && bmax[2] >= amin[2]
+}
+func testHasSameItems(a1, a2 []pair.Pair) bool {
+	if len(a1) != len(a2) {
+		return false
+	}
+	for _, p1 := range a1 {
+		var found bool
+		for _, p2 := range a2 {
+			if p1 == p2 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }

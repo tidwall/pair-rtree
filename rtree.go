@@ -171,7 +171,12 @@ func (tr *RTree) isEmpty(which int) bool {
 	}
 	return empty
 }
-
+func (tr *RTree) Scan(iter func(item pair.Pair) bool) bool {
+	if !tr.tr2.Scan(iter) {
+		return false
+	}
+	return tr.tr3.Scan(iter)
+}
 func (tr *RTree) Bounds() (min, max [3]float64) {
 	empty2 := tr.isEmpty(2)
 	empty3 := tr.isEmpty(3)
