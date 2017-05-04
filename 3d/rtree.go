@@ -9,6 +9,8 @@ import (
 	"github.com/tidwall/pair"
 )
 
+type transformer func(minIn, maxIn [3]float64) (minOut, maxOut [3]float64)
+
 var mathInfNeg = math.Inf(-1)
 var mathInfPos = math.Inf(+1)
 
@@ -25,8 +27,6 @@ func mathMax(a, b float64) float64 {
 	}
 	return b
 }
-
-const defaultMaxEntries = 15
 
 type treeNode struct {
 	minX, minY, minZ float64
@@ -76,16 +76,31 @@ func (a *treeNode) margin() float64 {
 	return (a.maxX - a.minX) + (a.maxY - a.minY) + (a.maxZ - a.minZ)
 }
 
+type Options struct {
+	MaxEntries  int
+	Transformer func(minIn, maxIn [3]float64) (minOut, maxOut [3]float64)
+}
+
+var DefaultOptions = &Options{
+	MaxEntries:  9,
+	Transformer: nil,
+}
+
 type RTree struct {
 	maxEntries int
 	minEntries int
+	t          transformer
 	data       *treeNode
 	reusePath  []*treeNode
 }
 
-func New() *RTree {
+func New(opts *Options) *RTree {
 	tr := &RTree{}
-	maxEntries := defaultMaxEntries
+	if opts == nil {
+		opts = DefaultOptions
+	}
+	var maxEntries = DefaultOptions.MaxEntries
+	tr.t = DefaultOptions.Transformer
 	tr.maxEntries = int(mathMax(4, float64(maxEntries)))
 	tr.minEntries = int(mathMax(2, math.Ceil(float64(tr.maxEntries)*0.4)))
 	tr.data = createNode(nil)
@@ -105,13 +120,13 @@ func createNode(children []unsafe.Pointer) *treeNode {
 		maxZ:     mathInfNeg,
 	}
 }
-func fillBBox(item pair.Pair, bbox *treeNode) {
-	min, max := geobin.WrapBinary(item.Value()).Rect()
+func fillBBox(item pair.Pair, bbox *treeNode, t transformer) {
+	min, max := geobin.WrapBinary(item.Value()).Rect(t)
 	bbox.minX, bbox.minY, bbox.minZ = min[0], min[1], min[2]
 	bbox.maxX, bbox.maxY, bbox.maxZ = max[0], max[1], max[2]
 }
 func (tr *RTree) Insert(item pair.Pair) {
-	min, max := geobin.WrapBinary(item.Value()).Rect()
+	min, max := geobin.WrapBinary(item.Value()).Rect(tr.t)
 	tr.insertBBox(item, min[0], min[1], min[2], max[0], max[1], max[2])
 }
 func (tr *RTree) insertBBox(item pair.Pair, minX, minY, minZ, maxX, maxY, maxZ float64) {
@@ -160,8 +175,8 @@ func (tr *RTree) split(insertPath []*treeNode, level int8) []*treeNode {
 	newNode.height = node.height
 	newNode.leaf = node.leaf
 
-	calcBBox(node)
-	calcBBox(newNode)
+	calcBBox(node, tr.t)
+	calcBBox(newNode, tr.t)
 
 	if level != 0 {
 		insertPath[level-1].children = append(insertPath[level-1].children, unsafe.Pointer(newNode))
@@ -174,7 +189,7 @@ func (tr *RTree) splitRoot(node, newNode *treeNode) {
 	tr.data = createNode([]unsafe.Pointer{unsafe.Pointer(node), unsafe.Pointer(newNode)})
 	tr.data.height = node.height + 1
 	tr.data.leaf = false
-	calcBBox(tr.data)
+	calcBBox(tr.data, tr.t)
 }
 func (tr *RTree) chooseSplitIndex(node *treeNode, m, M int) int {
 	var i int
@@ -186,8 +201,8 @@ func (tr *RTree) chooseSplitIndex(node *treeNode, m, M int) int {
 	minOverlap = minArea
 
 	for i = m; i <= M-m; i++ {
-		bbox1 = distBBox(node, 0, i, nil)
-		bbox2 = distBBox(node, i, M, nil)
+		bbox1 = distBBox(node, 0, i, nil, tr.t)
+		bbox2 = distBBox(node, i, M, nil, tr.t)
 
 		overlap = bbox1.intersectionArea(bbox2)
 		area = bbox1.area() + bbox2.area()
@@ -217,23 +232,24 @@ func (tr *RTree) chooseSplitAxis(node *treeNode, m, M int) {
 	var zMargin = tr.allDistMargin(node, m, M, 3)
 	if xMargin < yMargin { // xyz, xzy, zxy
 		if xMargin < zMargin { // xyz, xzy
-			sortNodes(node, 1)
+			sortNodes(node, 1, tr.t)
 		}
 	} else if yMargin < zMargin { // yxz, yzx
-		sortNodes(node, 2)
+		sortNodes(node, 2, tr.t)
 	}
 }
 
 type leafByDim struct {
 	node *treeNode
 	dim  int
+	t    transformer
 }
 
 func (arr *leafByDim) Len() int { return len(arr.node.children) }
 func (arr *leafByDim) Less(i, j int) bool {
 	var a, b treeNode
-	fillBBox(pair.FromPointer(arr.node.children[i]), &a)
-	fillBBox(pair.FromPointer(arr.node.children[j]), &b)
+	fillBBox(pair.FromPointer(arr.node.children[i]), &a, arr.t)
+	fillBBox(pair.FromPointer(arr.node.children[j]), &b, arr.t)
 	if arr.dim == 1 {
 		return a.minX < b.minX
 	}
@@ -272,18 +288,18 @@ func (arr *nodeByDim) Less(i, j int) bool {
 func (arr *nodeByDim) Swap(i, j int) {
 	arr.node.children[i], arr.node.children[j] = arr.node.children[j], arr.node.children[i]
 }
-func sortNodes(node *treeNode, dim int) {
+func sortNodes(node *treeNode, dim int, t transformer) {
 	if node.leaf {
-		sort.Sort(&leafByDim{node: node, dim: dim})
+		sort.Sort(&leafByDim{node: node, dim: dim, t: t})
 	} else {
 		sort.Sort(&nodeByDim{node: node, dim: dim})
 	}
 }
 
 func (tr *RTree) allDistMargin(node *treeNode, m, M int, dim int) float64 {
-	sortNodes(node, dim)
-	var leftBBox = distBBox(node, 0, m, nil)
-	var rightBBox = distBBox(node, M-m, M, nil)
+	sortNodes(node, dim, tr.t)
+	var leftBBox = distBBox(node, 0, m, nil, tr.t)
+	var rightBBox = distBBox(node, M-m, M, nil, tr.t)
 	var margin = leftBBox.margin() + rightBBox.margin()
 
 	var i int
@@ -291,12 +307,12 @@ func (tr *RTree) allDistMargin(node *treeNode, m, M int, dim int) float64 {
 	if node.leaf {
 		var child treeNode
 		for i = m; i < M-m; i++ {
-			fillBBox(pair.FromPointer(node.children[i]), &child)
+			fillBBox(pair.FromPointer(node.children[i]), &child, tr.t)
 			leftBBox.extend(&child)
 			margin += leftBBox.margin()
 		}
 		for i = M - m - 1; i >= m; i-- {
-			fillBBox(pair.FromPointer(node.children[i]), &child)
+			fillBBox(pair.FromPointer(node.children[i]), &child, tr.t)
 			leftBBox.extend(&child)
 			margin += rightBBox.margin()
 		}
@@ -352,10 +368,10 @@ func (tr *RTree) chooseSubtree(bbox, node *treeNode, level int8, path []*treeNod
 	return node, path
 }
 
-func calcBBox(node *treeNode) {
-	distBBox(node, 0, len(node.children), node)
+func calcBBox(node *treeNode, t transformer) {
+	distBBox(node, 0, len(node.children), node, t)
 }
-func distBBox(node *treeNode, k, p int, destNode *treeNode) *treeNode {
+func distBBox(node *treeNode, k, p int, destNode *treeNode, t transformer) *treeNode {
 	if destNode == nil {
 		destNode = createNode(nil)
 	} else {
@@ -371,7 +387,7 @@ func distBBox(node *treeNode, k, p int, destNode *treeNode) *treeNode {
 		ptr := node.children[i]
 		if node.leaf {
 			var child treeNode
-			fillBBox(pair.FromPointer(ptr), &child)
+			fillBBox(pair.FromPointer(ptr), &child, t)
 			destNode.extend(&child)
 		} else {
 			child := (*treeNode)(ptr)
@@ -382,7 +398,7 @@ func distBBox(node *treeNode, k, p int, destNode *treeNode) *treeNode {
 }
 
 func (tr *RTree) Search(bbox pair.Pair, iter func(item pair.Pair) bool) bool {
-	min, max := geobin.WrapBinary(bbox.Value()).Rect()
+	min, max := geobin.WrapBinary(bbox.Value()).Rect(tr.t)
 	return tr.searchBBox(min[0], min[1], min[2], max[0], max[1], max[2], iter)
 }
 
@@ -394,15 +410,15 @@ func (tr *RTree) searchBBox(minX, minY, minZ, maxX, maxY, maxZ float64,
 	if !tr.data.intersects(&bboxn) {
 		return true
 	}
-	return search(tr.data, &bboxn, iter)
+	return search(tr.data, &bboxn, iter, tr.t)
 }
 
-func search(node, bbox *treeNode, iter func(item pair.Pair) bool) bool {
+func search(node, bbox *treeNode, iter func(item pair.Pair) bool, t transformer) bool {
 	if node.leaf {
 		for i := 0; i < len(node.children); i++ {
 			item := pair.FromPointer(node.children[i])
 			var child treeNode
-			fillBBox(item, &child)
+			fillBBox(item, &child, t)
 			if bbox.intersects(&child) {
 				if !iter(item) {
 					return false
@@ -413,7 +429,7 @@ func search(node, bbox *treeNode, iter func(item pair.Pair) bool) bool {
 		for i := 0; i < len(node.children); i++ {
 			child := (*treeNode)(node.children[i])
 			if bbox.intersects(child) {
-				if !search(child, bbox, iter) {
+				if !search(child, bbox, iter, t) {
 					return false
 				}
 			}
@@ -423,7 +439,7 @@ func search(node, bbox *treeNode, iter func(item pair.Pair) bool) bool {
 }
 
 func (tr *RTree) Remove(item pair.Pair) {
-	min, max := geobin.WrapBinary(item.Value()).Rect()
+	min, max := geobin.WrapBinary(item.Value()).Rect(tr.t)
 	tr.removeBBox(item, min[0], min[1], min[2], max[0], max[1], max[2])
 }
 
@@ -511,7 +527,7 @@ func (tr *RTree) condense(path []*treeNode) {
 				tr.data = createNode(nil) // clear tree
 			}
 		} else {
-			calcBBox(path[i])
+			calcBBox(path[i], tr.t)
 		}
 	}
 }
@@ -539,10 +555,10 @@ func count(node *treeNode) int {
 }
 
 func (tr *RTree) Traverse(iter func(min, max [3]float64, level int, item pair.Pair) bool) {
-	traverse(tr.data, iter)
+	traverse(tr.data, iter, tr.t)
 }
 
-func traverse(node *treeNode, iter func(min, max [3]float64, level int, item pair.Pair) bool) bool {
+func traverse(node *treeNode, iter func(min, max [3]float64, level int, item pair.Pair) bool, t transformer) bool {
 	if !iter(
 		[3]float64{node.minX, node.minY, node.minZ},
 		[3]float64{node.maxX, node.maxY, node.maxZ},
@@ -554,7 +570,7 @@ func traverse(node *treeNode, iter func(min, max [3]float64, level int, item pai
 		for _, ptr := range node.children {
 			item := pair.FromPointer(ptr)
 			var bbox treeNode
-			fillBBox(item, &bbox)
+			fillBBox(item, &bbox, t)
 			if !iter(
 				[3]float64{bbox.minX, bbox.minY, bbox.minZ},
 				[3]float64{bbox.maxX, bbox.maxY, bbox.maxZ},
@@ -565,7 +581,7 @@ func traverse(node *treeNode, iter func(min, max [3]float64, level int, item pai
 		}
 	} else {
 		for _, ptr := range node.children {
-			if !traverse((*treeNode)(ptr), iter) {
+			if !traverse((*treeNode)(ptr), iter, t) {
 				return false
 			}
 		}

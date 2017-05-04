@@ -10,15 +10,43 @@ import (
 	rtree3 "github.com/tidwall/pair-rtree/3d"
 )
 
+type transformer func(minIn, maxIn [3]float64) (minOut, maxOut [3]float64)
+
 type RTree struct {
 	tr2 *rtree2.RTree
 	tr3 *rtree3.RTree
+	t   transformer
 }
 
-func New() *RTree {
+type Options struct {
+	MaxEntries  int
+	Transformer func(minIn, maxIn [3]float64) (minOut, maxOut [3]float64)
+}
+
+var DefaultOptions = &Options{
+	MaxEntries:  9,
+	Transformer: nil,
+}
+
+func New(opts *Options) *RTree {
+	var opts2 *rtree2.Options
+	var opts3 *rtree3.Options
+	var t transformer
+	if opts != nil {
+		opts2 = &rtree2.Options{}
+		*opts2 = *rtree2.DefaultOptions
+		opts2.MaxEntries = opts.MaxEntries
+		opts2.Transformer = opts.Transformer
+		opts3 = &rtree3.Options{}
+		*opts3 = *rtree3.DefaultOptions
+		opts3.MaxEntries = opts.MaxEntries
+		opts3.Transformer = opts.Transformer
+		t = opts.Transformer
+	}
 	return &RTree{
-		tr2: rtree2.New(),
-		tr3: rtree3.New(),
+		tr2: rtree2.New(opts2),
+		tr3: rtree3.New(opts3),
+		t:   t,
 	}
 }
 
@@ -40,7 +68,7 @@ func (tr *RTree) Remove(item pair.Pair) {
 
 func (tr *RTree) Search(box pair.Pair, iter func(item pair.Pair) bool) bool {
 	dims := geobin.WrapBinary(box.Value()).Dims()
-	min, max := geobin.WrapBinary(box.Value()).Rect()
+	min, max := geobin.WrapBinary(box.Value()).Rect(tr.t)
 	if dims == 2 {
 		if !tr.tr2.Search(box, iter) {
 			return false

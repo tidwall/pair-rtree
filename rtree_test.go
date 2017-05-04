@@ -52,7 +52,7 @@ func testRandom(t *testing.T, n, lb, ub int) {
 		}
 		objs = append(objs, obj)
 	}
-	tr := New()
+	tr := New(nil)
 	min, max := tr.Bounds()
 	assert.Equal(t, [3]float64{0, 0, 0}, min)
 	assert.Equal(t, [3]float64{0, 0, 0}, max)
@@ -68,7 +68,7 @@ func testRandom(t *testing.T, n, lb, ub int) {
 	min = [3]float64{math.Inf(+1), math.Inf(+1), math.Inf(+1)}
 	max = [3]float64{math.Inf(-1), math.Inf(-1), math.Inf(-1)}
 	for _, o := range objs {
-		minb, maxb := geobin.WrapBinary(o.Value()).Rect()
+		minb, maxb := geobin.WrapBinary(o.Value()).Rect(nil)
 		for i := 0; i < len(min); i++ {
 			if minb[i] < min[i] {
 				min[i] = minb[i]
@@ -148,8 +148,8 @@ func testKNN(t *testing.T, tr *RTree, objs []pair.Pair, n int, check bool) {
 	sort.Slice(nobjs, func(i, j int) bool {
 		io := geobin.WrapBinary(nobjs[i].Value())
 		jo := geobin.WrapBinary(nobjs[j].Value())
-		imin, imax := io.Rect()
-		jmin, jmax := jo.Rect()
+		imin, imax := io.Rect(nil)
+		jmin, jmax := jo.Rect(nil)
 		// boxDist is a private function.
 		var idist, jdist float64
 		if io.Dims() == 2 {
@@ -169,7 +169,7 @@ func testKNN(t *testing.T, tr *RTree, objs []pair.Pair, n int, check bool) {
 	var dists2 []float64
 	for i := 0; i < len(arr2); i++ {
 		o := geobin.WrapBinary(arr2[i].Value())
-		min, max := o.Rect()
+		min, max := o.Rect(nil)
 		var dist float64
 		if o.Dims() == 2 {
 			dist = testBoxDist2(x, y, min, max)
@@ -321,7 +321,7 @@ func testSearch(t *testing.T, tr *RTree, objs []pair.Pair, percent float64, chec
 
 func rectString(item pair.Pair) string {
 	dims := geobin.WrapBinary(item.Value()).Dims()
-	min, max := geobin.WrapBinary(item.Value()).Rect()
+	min, max := geobin.WrapBinary(item.Value()).Rect(nil)
 	if dims == 2 {
 		return fmt.Sprintf("[%7.2f %7.2f %7.2f %7.2f]", min[0], min[1], max[0], max[1])
 	}
@@ -330,9 +330,9 @@ func rectString(item pair.Pair) string {
 
 func testIntersects(obj, box pair.Pair) bool {
 	odims := geobin.WrapBinary(obj.Value()).Dims()
-	omin, omax := geobin.WrapBinary(obj.Value()).Rect()
+	omin, omax := geobin.WrapBinary(obj.Value()).Rect(nil)
 	bdims := geobin.WrapBinary(box.Value()).Dims()
-	bmin, bmax := geobin.WrapBinary(box.Value()).Rect()
+	bmin, bmax := geobin.WrapBinary(box.Value()).Rect(nil)
 	if odims == 2 {
 		if bdims == 2 {
 			return testIntersects2(omin, omax, bmin, bmax)

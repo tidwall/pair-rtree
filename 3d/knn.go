@@ -26,7 +26,7 @@ func (tr *RTree) KNN(x, y, z float64, iter func(item pair.Pair, dist float64) bo
 			var min, max [3]float64
 			if node.leaf {
 				item := pair.FromPointer(child)
-				omin, omax := geobin.WrapBinary(item.Value()).Rect()
+				omin, omax := geobin.WrapBinary(item.Value()).Rect(tr.t)
 				min[0], min[1], min[2] = omin[0], omin[1], omin[2]
 				max[0], max[1], max[2] = omax[0], omax[1], omax[2]
 			} else {

@@ -18,12 +18,11 @@ import (
 func makePointPair3(key string, x, y, z float64) pair.Pair {
 	return pair.New([]byte(key), geobin.Make3DPoint(x, y, z).Binary())
 }
-
 func makeBoundsPair3(key string, minx, miny, minz, maxx, maxy, maxz float64) pair.Pair {
 	return pair.New([]byte(key), geobin.Make3DRect(minx, miny, minz, maxx, maxy, maxz).Binary())
 }
 func TestBasic(t *testing.T) {
-	tr := New()
+	tr := New(nil)
 	p1 := makePointPair3("key1", -115, 33, 1)
 	p2 := makePointPair3("key2", -113, 35, 2)
 	tr.Insert(p1)
@@ -88,7 +87,7 @@ func TestRandomRects(t *testing.T) {
 
 func testRandom(t *testing.T, which string, n int) {
 	rand.Seed(time.Now().UnixNano())
-	tr := New()
+	tr := New(nil)
 	min, max := tr.Bounds()
 	assert.Equal(t, [3]float64{0, 0, 0}, min)
 	assert.Equal(t, [3]float64{0, 0, 0}, max)
@@ -140,7 +139,7 @@ func testRandom(t *testing.T, which string, n int) {
 	min = [3]float64{math.Inf(+1), math.Inf(+1), math.Inf(+1)}
 	max = [3]float64{math.Inf(-1), math.Inf(-1), math.Inf(-1)}
 	for _, o := range objs {
-		minb, maxb := geobin.WrapBinary(o.Value()).Rect()
+		minb, maxb := geobin.WrapBinary(o.Value()).Rect(nil)
 		for i := 0; i < len(min); i++ {
 			if minb[i] < min[i] {
 				min[i] = minb[i]
@@ -217,8 +216,8 @@ func testKNN(t *testing.T, tr *RTree, objs []pair.Pair, n int, check bool) {
 	nobjs := make([]pair.Pair, len(objs))
 	copy(nobjs, objs)
 	sort.Slice(nobjs, func(i, j int) bool {
-		imin, imax := geobin.WrapBinary(nobjs[i].Value()).Rect()
-		jmin, jmax := geobin.WrapBinary(nobjs[j].Value()).Rect()
+		imin, imax := geobin.WrapBinary(nobjs[i].Value()).Rect(nil)
+		jmin, jmax := geobin.WrapBinary(nobjs[j].Value()).Rect(nil)
 		idist := testBoxDist(x, y, z, imin, imax)
 		jdist := testBoxDist(x, y, z, jmin, jmax)
 		return idist < jdist
@@ -226,7 +225,7 @@ func testKNN(t *testing.T, tr *RTree, objs []pair.Pair, n int, check bool) {
 	arr2 := nobjs[:len(arr1)]
 	var dists2 []float64
 	for i := 0; i < len(arr2); i++ {
-		min, max := geobin.WrapBinary(arr2[i].Value()).Rect()
+		min, max := geobin.WrapBinary(arr2[i].Value()).Rect(nil)
 		dist := testBoxDist(x, y, z, min, max)
 		dists2 = append(dists2, dist)
 	}
@@ -291,8 +290,8 @@ func testSearch(t *testing.T, tr *RTree, objs []pair.Pair, percent float64, chec
 }
 
 func testIntersects(obj, box pair.Pair) bool {
-	amin, amax := geobin.WrapBinary(obj.Value()).Rect()
-	bmin, bmax := geobin.WrapBinary(box.Value()).Rect()
+	amin, amax := geobin.WrapBinary(obj.Value()).Rect(nil)
+	bmin, bmax := geobin.WrapBinary(box.Value()).Rect(nil)
 	return bmin[0] <= amax[0] && bmin[1] <= amax[1] && bmin[2] <= amax[2] &&
 		bmax[0] >= amin[0] && bmax[1] >= amin[1] && bmax[2] >= amin[2]
 }
@@ -317,7 +316,7 @@ func testHasSameItems(a1, a2 []pair.Pair) bool {
 
 func TestOutput3DPNG(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
-	tr := New()
+	tr := New(nil)
 	for i := 0; i < 7500; i++ {
 		x := rand.Float64()*2 - 1
 		y := rand.Float64()*2 - 1
@@ -367,7 +366,7 @@ func BenchmarkInsert(b *testing.B) {
 	}
 	b.ReportAllocs()
 	b.ResetTimer()
-	tr := New()
+	tr := New(nil)
 	for i := 0; i < b.N; i++ {
 		tr.Insert(points[i])
 	}
