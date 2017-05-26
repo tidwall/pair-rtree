@@ -2,17 +2,22 @@ package rtree
 
 import (
 	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/gif"
 	"math"
 	"math/rand"
+	"os"
 	"runtime"
 	"sort"
 	"testing"
 	"time"
 
-	"github.com/fogleman/gg"
 	"github.com/stretchr/testify/assert"
 	"github.com/tidwall/geobin"
 	"github.com/tidwall/pair"
+	"github.com/tidwall/pinhole"
 )
 
 func makePointPair2(key string, x, y float64) pair.Pair {
@@ -309,57 +314,58 @@ func testHasSameItems(a1, a2 []pair.Pair) bool {
 	}
 	return true
 }
-func TestOutput2DPNG(t *testing.T) {
+func TestOutput3DPNG(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
 	tr := New(nil)
-	for i := 0; i < 7500; i++ {
-		x := rand.Float64()*360 - 180
-		y := rand.Float64()*180 - 90
+	for i := 0; i < 5000; i++ {
+		x := rand.Float64()*1 - 0.5
+		y := rand.Float64()*1 - 0.5
 		tr.Insert(makePointPair2("", x, y))
 	}
-
-	var w, h float64
-	var scale float64 = 3.0
-	var dc *gg.Context
+	p := pinhole.New()
 	tr.Traverse(func(min, max [2]float64, level int, item pair.Pair) bool {
-		if dc == nil {
-			w, h = (max[0]-min[0])*scale, (max[1]-min[1])*scale
-			dc = gg.NewContext(int(w), int(h))
-			dc.DrawRectangle(0, 0, w+1, h+1)
-			dc.SetRGB(0, 0, 0)
-			dc.Fill()
-			dc.SetLineWidth(0.2 * scale)
-		}
-		switch level {
-		default:
-			dc.SetRGB(0, 0, 0)
-		case 0:
-			dc.SetRGB(1, 0, 0)
-		case 1:
-			dc.SetRGB(0, 1, 0)
-		case 2:
-			dc.SetRGB(0, 0, 1)
-		case 3:
-			dc.SetRGB(1, 1, 0)
-		case 4:
-			dc.SetRGB(1, 0, 1)
-		case 5:
-			dc.SetRGB(0, 1, 1)
-		case 6:
-			dc.SetRGB(0.5, 0, 0)
-		case 7:
-			dc.SetRGB(0, 0.5, 0)
-		}
-		if level == 0 {
-			dc.DrawRectangle(min[0]*scale+w/2-1, min[1]*scale+h/2-1, (max[0]-min[0])*scale+1, (max[1]-min[1])*scale+1)
-			dc.Fill()
+		p.Begin()
+		if level > 0 {
+			p.DrawCube(min[0], min[1], 0, max[0], max[1], 0)
+			p.Colorize(color.RGBA{128, 255, 128, 255})
 		} else {
-			dc.DrawRectangle(min[0]*scale+w/2, min[1]*scale+h/2, (max[0]-min[0])*scale, (max[1]-min[1])*scale)
-			dc.Stroke()
+			p.DrawDot(min[0], min[1], 0, 0.15)
+			p.Colorize(color.RGBA{255, 0, 0, 255})
 		}
+		p.End()
 		return true
 	})
-	dc.SavePNG("out2d.png")
+	p.Scale(0.75, 0.75, 0.75)
+	// render the paths in an image
+	opts := *pinhole.DefaultImageOptions
+	opts.LineWidth = 0.025
+	opts.BGColor = color.Black
+	p.SavePNG("out.png", 1000, 1000, &opts)
+	fmt.Println("wrote out.png")
+	if os.Getenv("GIFOUTPUT") != "" {
+		var palette = []color.Color{}
+		colors := uint8(16)
+		for i := uint8(0); i < colors; i++ {
+			palette = append(palette, color.RGBA{128 / colors * i, 255 / colors * i, 128 / colors * i, 255})
+			palette = append(palette, color.RGBA{255 / colors * i, 0, 0, 255})
+		}
+		outGif := &gif.GIF{}
+		for i := 0; i < 60; i++ {
+			p.Rotate(0, math.Pi*2/60.0, 0)
+			inPng := p.Image(1000, 1000, &opts)
+			inGif := image.NewPaletted(inPng.Bounds(), palette)
+			draw.Draw(inGif, inPng.Bounds(), inPng, image.Point{}, draw.Src)
+			outGif.Image = append(outGif.Image, inGif)
+			outGif.Delay = append(outGif.Delay, 0)
+			fmt.Printf("wrote gif frame %d/%d\n", i, 60)
+		}
+		f, _ := os.OpenFile("out.gif", os.O_WRONLY|os.O_CREATE, 0600)
+		defer f.Close()
+		gif.EncodeAll(f, outGif)
+	} else {
+		fmt.Println("use GIFOUTPUT=1 for animated gif")
+	}
+
 }
 
 func BenchmarkInsert(b *testing.B) {

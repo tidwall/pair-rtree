@@ -2,17 +2,22 @@ package rtree
 
 import (
 	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/gif"
 	"math"
 	"math/rand"
+	"os"
 	"runtime"
 	"sort"
 	"testing"
 	"time"
 
-	"github.com/fogleman/ln/ln"
 	"github.com/stretchr/testify/assert"
 	"github.com/tidwall/geobin"
 	"github.com/tidwall/pair"
+	"github.com/tidwall/pinhole"
 )
 
 func makePointPair3(key string, x, y, z float64) pair.Pair {
@@ -317,42 +322,56 @@ func testHasSameItems(a1, a2 []pair.Pair) bool {
 func TestOutput3DPNG(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
 	tr := New(nil)
-	for i := 0; i < 7500; i++ {
-		x := rand.Float64()*2 - 1
-		y := rand.Float64()*2 - 1
-		z := rand.Float64()*2 - 1
+	for i := 0; i < 5000; i++ {
+		x := rand.Float64()*1 - 0.5
+		y := rand.Float64()*1 - 0.5
+		z := rand.Float64()*1 - 0.5
 		tr.Insert(makePointPair3("", x, y, z))
 	}
-
-	scene := ln.Scene{}
+	p := pinhole.New()
 	tr.Traverse(func(min, max [3]float64, level int, item pair.Pair) bool {
+		p.Begin()
 		if level > 0 {
-			scene.Add(ln.NewCube(
-				ln.Vector{min[0] - 0.01, min[1] - 0.01, min[2] - 0.01},
-				ln.Vector{max[0] + 0.01, max[1] + 0.01, max[2] + 0.01},
-			))
+			p.DrawCube(min[0], min[1], min[2], max[0], max[1], max[2])
+			p.Colorize(color.RGBA{128, 255, 128, 255})
+		} else {
+			p.DrawDot(min[0], min[1], min[2], 0.15)
+			p.Colorize(color.RGBA{255, 0, 0, 255})
 		}
+		p.End()
 		return true
 	})
-
-	// define camera parameters
-	eye := ln.Vector{4, 3, 2}    // camera position
-	center := ln.Vector{0, 0, 0} // camera looks at
-	up := ln.Vector{0, 0, 1}     // up direction
-
-	// define rendering parameters
-	width := 1024.0  // rendered width
-	height := 1024.0 // rendered height
-	fovy := 50.0     // vertical field of view, degrees
-	znear := 0.1     // near z plane
-	zfar := 10.0     // far z plane
-	step := 0.5      // how finely to chop the paths for visibility testing
-
-	// compute 2D paths that depict the 3D scene
-	paths := scene.Render(eye, center, up, width, height, fovy, znear, zfar, step)
-
+	p.Scale(0.75, 0.75, 0.75)
 	// render the paths in an image
-	paths.WriteToPNG("out3d.png", width, height)
+	opts := *pinhole.DefaultImageOptions
+	opts.LineWidth = 0.025
+	opts.BGColor = color.Black
+	p.SavePNG("out.png", 1000, 1000, &opts)
+	fmt.Println("wrote out.png")
+	if os.Getenv("GIFOUTPUT") != "" {
+		var palette = []color.Color{}
+		colors := uint8(16)
+		for i := uint8(0); i < colors; i++ {
+			palette = append(palette, color.RGBA{128 / colors * i, 255 / colors * i, 128 / colors * i, 255})
+			palette = append(palette, color.RGBA{255 / colors * i, 0, 0, 255})
+		}
+		outGif := &gif.GIF{}
+		for i := 0; i < 60; i++ {
+			p.Rotate(0, math.Pi*2/60.0, 0)
+			inPng := p.Image(1000, 1000, &opts)
+			inGif := image.NewPaletted(inPng.Bounds(), palette)
+			draw.Draw(inGif, inPng.Bounds(), inPng, image.Point{}, draw.Src)
+			outGif.Image = append(outGif.Image, inGif)
+			outGif.Delay = append(outGif.Delay, 0)
+			fmt.Printf("wrote gif frame %d/%d\n", i, 60)
+		}
+		f, _ := os.OpenFile("out.gif", os.O_WRONLY|os.O_CREATE, 0600)
+		defer f.Close()
+		gif.EncodeAll(f, outGif)
+	} else {
+		fmt.Println("use GIFOUTPUT=1 for animated gif")
+	}
+
 }
 
 func BenchmarkInsert(b *testing.B) {

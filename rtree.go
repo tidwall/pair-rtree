@@ -234,3 +234,17 @@ func (tr *RTree) Bounds() (min, max [3]float64) {
 	}
 	return min, max
 }
+
+func (tr *RTree) Load(items []pair.Pair) {
+	var items2D []pair.Pair
+	var items3D []pair.Pair
+	for _, item := range items {
+		if geobin.WrapBinary(item.Value()).Dims() == 2 {
+			items2D = append(items2D, item)
+		} else {
+			items3D = append(items3D, item)
+		}
+	}
+	tr.tr2.Load(items2D)
+	tr.tr2.Load(items3D)
+}

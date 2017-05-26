@@ -616,3 +616,11 @@ func (tr *RTree) Bounds() (min, max [3]float64) {
 	return [3]float64{tr.data.minX, tr.data.minY, tr.data.minZ},
 		[3]float64{tr.data.maxX, tr.data.maxY, tr.data.maxZ}
 }
+
+// Load bulk loads items. For now it only loads each item one at a time.
+// In the future it should use the OMT algorithm.
+func (tr *RTree) Load(items []pair.Pair) {
+	for _, item := range items {
+		tr.Insert(item)
+	}
+}
