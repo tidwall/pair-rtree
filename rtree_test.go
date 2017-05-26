@@ -14,27 +14,27 @@ import (
 )
 
 func TestTree2DPoints(t *testing.T) {
-	testRandom(t, 10000, 0, 0) // 2d points
+	testRandom(t, 10000, 0, 0, false) // 2d points
 }
 func TestTree3DPoints(t *testing.T) {
-	testRandom(t, 10000, 1, 1) // 3d points
+	testRandom(t, 10000, 1, 1, false) // 3d points
 }
 func TestTree2DRects(t *testing.T) {
-	testRandom(t, 10000, 2, 2) // 2d rects
+	testRandom(t, 10000, 2, 2, false) // 2d rects
 }
 func TestTree3DRects(t *testing.T) {
-	testRandom(t, 10000, 3, 3) // 3d rects
+	testRandom(t, 10000, 3, 3, false) // 3d rects
 }
 func TestTree2D3DPoints(t *testing.T) {
-	testRandom(t, 10000, 0, 1) // 2d/3d points
+	testRandom(t, 10000, 0, 1, false) // 2d/3d points
 }
 func TestTree2D3DRect(t *testing.T) {
-	testRandom(t, 10000, 2, 3) // 2d/3d rects
+	testRandom(t, 10000, 2, 3, false) // 2d/3d rects
 }
 func TestTreeMixed(t *testing.T) {
-	testRandom(t, 10000, 0, 3) // all mixed
+	testRandom(t, 10000, 0, 3, false) // all mixed
 }
-func testRandom(t *testing.T, n, lb, ub int) {
+func testRandom(t *testing.T, n, lb, ub int, wgs84 bool) {
 	rand.Seed(time.Now().UnixNano())
 	var objs []pair.Pair
 	for i := 0; i < n; i++ {
@@ -52,7 +52,11 @@ func testRandom(t *testing.T, n, lb, ub int) {
 		}
 		objs = append(objs, obj)
 	}
-	tr := New(nil)
+	var opts = *DefaultOptions
+	if wgs84 {
+		//opts.Transformer = TransformWGS84To3DMeters
+	}
+	tr := New(&opts)
 	min, max := tr.Bounds()
 	assert.Equal(t, [3]float64{0, 0, 0}, min)
 	assert.Equal(t, [3]float64{0, 0, 0}, max)
@@ -115,6 +119,7 @@ func testRandom(t *testing.T, n, lb, ub int) {
 	min, max = tr.Bounds()
 	assert.Equal(t, [3]float64{0, 0, 0}, min)
 	assert.Equal(t, [3]float64{0, 0, 0}, max)
+
 }
 
 func testKNN(t *testing.T, tr *RTree, objs []pair.Pair, n int, check bool) {

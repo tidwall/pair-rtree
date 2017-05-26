@@ -1,12 +1,22 @@
 package rtree
 
 import (
+	"fmt"
+	"image"
+	"image/color"
+	"image/color/palette"
+	"image/draw"
+	"image/gif"
+	"io"
 	"math"
+	"os"
 	"sort"
+	"strings"
 	"unsafe"
 
 	"github.com/tidwall/geobin"
 	"github.com/tidwall/pair"
+	"github.com/tidwall/pinhole"
 )
 
 type transformer func(minIn, maxIn [3]float64) (minOut, maxOut [3]float64)
@@ -597,4 +607,72 @@ func (tr *RTree) Load(items []pair.Pair) {
 	for _, item := range items {
 		tr.Insert(item)
 	}
+}
+
+func (tr *RTree) SavePNG(path string, width, height int, scale float64, showNodes bool, withGIF bool, printer io.Writer) error {
+	p := pinhole.New()
+	tr.Traverse(func(min, max [2]float64, level int, item pair.Pair) bool {
+		p.Begin()
+		if level > 0 && showNodes {
+			p.DrawCube(min[0], min[1], 0, max[0], max[1], 0)
+			switch level {
+			default:
+				p.Colorize(color.RGBA{64, 64, 64, 128})
+			case 1:
+				p.Colorize(color.RGBA{32, 64, 32, 64})
+			case 2:
+				p.Colorize(color.RGBA{48, 48, 96, 96})
+			case 3:
+				p.Colorize(color.RGBA{96, 128, 128, 128})
+			case 4:
+				p.Colorize(color.RGBA{128, 128, 196, 196})
+			}
+		} else {
+			p.DrawDot(min[0], min[1], 0, 0.05)
+			p.Colorize(color.White)
+		}
+		p.End()
+		return true
+	})
+	p.Scale(scale, scale, scale)
+	// render the paths in an image
+	opts := *pinhole.DefaultImageOptions
+	opts.LineWidth = 0.025
+	opts.BGColor = color.Black
+	if err := p.SavePNG(path, width, height, &opts); err != nil {
+		return err
+	}
+	if printer != nil {
+		fmt.Fprintf(printer, "wrote %s\n", path)
+	}
+	if withGIF {
+		var palette = palette.WebSafe
+		outGif := &gif.GIF{}
+		for i := 0; i < 60; i++ {
+			p.Rotate(0, math.Pi*2/60.0, 0)
+			inPng := p.Image(width, height, &opts)
+			inGif := image.NewPaletted(inPng.Bounds(), palette)
+			draw.Draw(inGif, inPng.Bounds(), inPng, image.Point{}, draw.Src)
+			outGif.Image = append(outGif.Image, inGif)
+			outGif.Delay = append(outGif.Delay, 0)
+			if printer != nil {
+				fmt.Fprintf(printer, "wrote gif frame %d/%d\n", i, 60)
+			}
+		}
+		if strings.HasSuffix(path, ".png") {
+			path = path[:len(path)-4] + ".gif"
+		}
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0600)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		if err := gif.EncodeAll(f, outGif); err != nil {
+			return err
+		}
+		if printer != nil {
+			fmt.Fprintf(printer, "wrote %s\n", path)
+		}
+	}
+	return nil
 }

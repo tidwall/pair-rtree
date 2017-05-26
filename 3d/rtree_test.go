@@ -2,10 +2,6 @@ package rtree
 
 import (
 	"fmt"
-	"image"
-	"image/color"
-	"image/draw"
-	"image/gif"
 	"math"
 	"math/rand"
 	"os"
@@ -17,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/tidwall/geobin"
 	"github.com/tidwall/pair"
-	"github.com/tidwall/pinhole"
+	"github.com/tidwall/pair-rtree/cities"
 )
 
 func makePointPair3(key string, x, y, z float64) pair.Pair {
@@ -319,61 +315,57 @@ func testHasSameItems(a1, a2 []pair.Pair) bool {
 	return true
 }
 
-func TestOutput3DPNG(t *testing.T) {
+func TestOutputPNG(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
 	tr := New(nil)
-	for i := 0; i < 5000; i++ {
-		x := rand.Float64()*1 - 0.5
-		y := rand.Float64()*1 - 0.5
-		z := rand.Float64()*1 - 0.5
-		tr.Insert(makePointPair3("", x, y, z))
-	}
-	p := pinhole.New()
-	tr.Traverse(func(min, max [3]float64, level int, item pair.Pair) bool {
-		p.Begin()
-		if level > 0 {
-			p.DrawCube(min[0], min[1], min[2], max[0], max[1], max[2])
-			p.Colorize(color.RGBA{128, 255, 128, 255})
-		} else {
-			p.DrawDot(min[0], min[1], min[2], 0.15)
-			p.Colorize(color.RGBA{255, 0, 0, 255})
+	if true {
+		c := cities.Cities
+		for i := 0; i < len(c); i++ {
+			x := c[i].Longitude
+			y := c[i].Latitude
+			z := c[i].Altitude
+			if z == 0 || z < -1000 {
+				continue
+			}
+			z /= 150
+			tr.Insert(makePointPair3("", x, y, z))
 		}
-		p.End()
-		return true
-	})
-	p.Scale(0.75, 0.75, 0.75)
-	// render the paths in an image
-	opts := *pinhole.DefaultImageOptions
-	opts.LineWidth = 0.025
-	opts.BGColor = color.Black
-	p.SavePNG("out.png", 1000, 1000, &opts)
-	fmt.Println("wrote out.png")
-	if os.Getenv("GIFOUTPUT") != "" {
-		var palette = []color.Color{}
-		colors := uint8(16)
-		for i := uint8(0); i < colors; i++ {
-			palette = append(palette, color.RGBA{128 / colors * i, 255 / colors * i, 128 / colors * i, 255})
-			palette = append(palette, color.RGBA{255 / colors * i, 0, 0, 255})
-		}
-		outGif := &gif.GIF{}
-		for i := 0; i < 60; i++ {
-			p.Rotate(0, math.Pi*2/60.0, 0)
-			inPng := p.Image(1000, 1000, &opts)
-			inGif := image.NewPaletted(inPng.Bounds(), palette)
-			draw.Draw(inGif, inPng.Bounds(), inPng, image.Point{}, draw.Src)
-			outGif.Image = append(outGif.Image, inGif)
-			outGif.Delay = append(outGif.Delay, 0)
-			fmt.Printf("wrote gif frame %d/%d\n", i, 60)
-		}
-		f, _ := os.OpenFile("out.gif", os.O_WRONLY|os.O_CREATE, 0600)
-		defer f.Close()
-		gif.EncodeAll(f, outGif)
 	} else {
+		for i := 0; i < 5000; i++ {
+			x := rand.Float64()*360 - 180
+			y := rand.Float64()*180 - 90
+			z := rand.Float64() * 20
+			tr.Insert(makePointPair3("", x, y, z))
+		}
+	}
+	withGIF := os.Getenv("GIFOUTPUT") != ""
+	if err := tr.SavePNG("out.png", 1000, 1000, 1.25/360.0, true, withGIF, os.Stdout); err != nil {
+		t.Fatal(err)
+	}
+	if !withGIF {
 		fmt.Println("use GIFOUTPUT=1 for animated gif")
 	}
-
 }
 
+func TestOutputSpherePNG(t *testing.T) {
+	rand.Seed(time.Now().UnixNano())
+	tr := New(nil)
+	c := cities.Cities
+	start := time.Now()
+	for i := 0; i < len(c); i++ {
+		p := lonLatElevToXYZ_WGS84([3]float64{c[i].Longitude, c[i].Latitude, c[i].Altitude})
+		tr.Insert(makePointPair3("", p[0], p[1], p[2]))
+	}
+	dur := time.Since(start)
+	fmt.Printf("wrote %d cities in %s (%.0f/ops)\n", len(c), dur, float64(len(c))/dur.Seconds())
+	withGIF := os.Getenv("GIFOUTPUT") != ""
+	if err := tr.SavePNG("sphere.png", 1000, 1000, 0.85/(6378137.0*2), true, withGIF, os.Stdout); err != nil {
+		t.Fatal(err)
+	}
+	if !withGIF {
+		fmt.Println("use GIFOUTPUT=1 for animated gif")
+	}
+}
 func BenchmarkInsert(b *testing.B) {
 	rand.Seed(0)
 	var points []pair.Pair
