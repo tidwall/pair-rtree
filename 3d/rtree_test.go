@@ -315,31 +315,45 @@ func testHasSameItems(a1, a2 []pair.Pair) bool {
 	return true
 }
 
-func TestOutputPNG(t *testing.T) {
+func TestOutputFlatPNG(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
 	tr := New(nil)
-	if true {
-		c := cities.Cities
-		for i := 0; i < len(c); i++ {
-			x := c[i].Longitude
-			y := c[i].Latitude
-			z := c[i].Altitude
-			if z == 0 || z < -1000 {
-				continue
-			}
-			z /= 150
-			tr.Insert(makePointPair3("", x, y, z))
+	c := cities.Cities
+	start := time.Now()
+	for i := 0; i < len(c); i++ {
+		x := c[i].Longitude
+		y := c[i].Latitude
+		z := c[i].Altitude
+		if z == 0 || z < -1000 {
+			continue
 		}
-	} else {
-		for i := 0; i < 5000; i++ {
-			x := rand.Float64()*360 - 180
-			y := rand.Float64()*180 - 90
-			z := rand.Float64() * 20
-			tr.Insert(makePointPair3("", x, y, z))
-		}
+		z /= 150
+		tr.Insert(makePointPair3("", x, y, z))
 	}
+	dur := time.Since(start)
+	fmt.Printf("wrote %d cities (flat) in %s (%.0f/ops)\n", len(c), dur, float64(len(c))/dur.Seconds())
 	withGIF := os.Getenv("GIFOUTPUT") != ""
 	if err := tr.SavePNG("out.png", 1000, 1000, 1.25/360.0, true, withGIF, os.Stdout); err != nil {
+		t.Fatal(err)
+	}
+	if !withGIF {
+		fmt.Println("use GIFOUTPUT=1 for animated gif")
+	}
+}
+
+func TestOutputWGS84PNG(t *testing.T) {
+	rand.Seed(time.Now().UnixNano())
+	tr := New(nil)
+	c := cities.Cities
+	start := time.Now()
+	for i := 0; i < len(c); i++ {
+		p := lonLatElevToXYZ_WGS84([3]float64{c[i].Longitude, c[i].Latitude, c[i].Altitude})
+		tr.Insert(makePointPair3("", p[0], p[1], p[2]))
+	}
+	dur := time.Since(start)
+	fmt.Printf("wrote %d cities (wgs84) in %s (%.0f/ops)\n", len(c), dur, float64(len(c))/dur.Seconds())
+	withGIF := os.Getenv("GIFOUTPUT") != ""
+	if err := tr.SavePNG("wgs84.png", 1000, 1000, 0.85/(6378137.0*2), true, withGIF, os.Stdout); err != nil {
 		t.Fatal(err)
 	}
 	if !withGIF {
@@ -353,11 +367,11 @@ func TestOutputSpherePNG(t *testing.T) {
 	c := cities.Cities
 	start := time.Now()
 	for i := 0; i < len(c); i++ {
-		p := lonLatElevToXYZ_WGS84([3]float64{c[i].Longitude, c[i].Latitude, c[i].Altitude})
+		p := lonLatElevToXYZ_Sphere([3]float64{c[i].Longitude, c[i].Latitude, c[i].Altitude})
 		tr.Insert(makePointPair3("", p[0], p[1], p[2]))
 	}
 	dur := time.Since(start)
-	fmt.Printf("wrote %d cities in %s (%.0f/ops)\n", len(c), dur, float64(len(c))/dur.Seconds())
+	fmt.Printf("wrote %d cities (sphere) in %s (%.0f/ops)\n", len(c), dur, float64(len(c))/dur.Seconds())
 	withGIF := os.Getenv("GIFOUTPUT") != ""
 	if err := tr.SavePNG("sphere.png", 1000, 1000, 0.85/(6378137.0*2), true, withGIF, os.Stdout); err != nil {
 		t.Fatal(err)
@@ -366,6 +380,7 @@ func TestOutputSpherePNG(t *testing.T) {
 		fmt.Println("use GIFOUTPUT=1 for animated gif")
 	}
 }
+
 func BenchmarkInsert(b *testing.B) {
 	rand.Seed(0)
 	var points []pair.Pair
