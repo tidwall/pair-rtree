@@ -333,7 +333,7 @@ func TestOutputFlatPNG(t *testing.T) {
 	dur := time.Since(start)
 	fmt.Printf("wrote %d cities (flat) in %s (%.0f/ops)\n", len(c), dur, float64(len(c))/dur.Seconds())
 	withGIF := os.Getenv("GIFOUTPUT") != ""
-	if err := tr.SavePNG("out.png", 1000, 1000, 1.25/360.0, true, withGIF, os.Stdout); err != nil {
+	if err := tr.SavePNG("flat.png", 1000, 1000, 1.25/360.0, true, withGIF, os.Stdout); err != nil {
 		t.Fatal(err)
 	}
 	if !withGIF {
