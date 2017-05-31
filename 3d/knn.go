@@ -18,6 +18,7 @@ func (item *queueItem) Less(b tinyqueue.Item) bool {
 	return item.dist < b.(*queueItem).dist
 }
 
+// KNN returns items nearest to farthest. The dist param is the "box distance".
 func (tr *RTree) KNN(x, y, z float64, iter func(item pair.Pair, dist float64) bool) bool {
 	node := tr.data
 	queue := tinyqueue.New(nil)

@@ -316,7 +316,6 @@ func testHasSameItems(a1, a2 []pair.Pair) bool {
 }
 
 func TestOutputFlatPNG(t *testing.T) {
-	rand.Seed(time.Now().UnixNano())
 	tr := New(nil)
 	c := cities.Cities
 	start := time.Now()
@@ -341,8 +340,31 @@ func TestOutputFlatPNG(t *testing.T) {
 	}
 }
 
+func TestWGS84CitiesKNN(t *testing.T) {
+	tr := New(nil)
+	c := cities.Cities
+	for i := 0; i < len(c); i++ {
+		p := lonLatElevToXYZ_WGS84([3]float64{c[i].Longitude, c[i].Latitude, c[i].Altitude})
+		tr.Insert(makePointPair3(c[i].City, p[0], p[1], p[2]))
+	}
+	p := lonLatElevToXYZ_WGS84([3]float64{-112.0740, 33.4484, 0})
+	var i int
+	start := time.Now()
+	tr.KNN(p[0], p[1], p[2], func(item pair.Pair, dist float64) bool {
+		/*
+			if i == 100 {
+				return false
+			}
+		*/
+		//fmt.Printf("%s %.2f km\n", item.Key(), math.Sqrt(dist)/1000)
+		i++
+		return true
+	})
+	dur := time.Since(start)
+	fmt.Printf("found %d KNN cities in %s (%.0f/ops)\n", len(c), dur, float64(len(c))/dur.Seconds())
+}
+
 func TestOutputWGS84PNG(t *testing.T) {
-	rand.Seed(time.Now().UnixNano())
 	tr := New(nil)
 	c := cities.Cities
 	start := time.Now()
